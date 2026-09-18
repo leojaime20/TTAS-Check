@@ -14,7 +14,6 @@ import {
   LayoutDashboard,
   RefreshCw,
   Search,
-  Settings2,
   ShieldCheck,
   UploadCloud,
   X,
@@ -60,7 +59,6 @@ function Header({ route }: { route: string }) {
       </a>
       <nav aria-label="Primary navigation">
         <a className={route !== "admin" ? "active" : ""} href="#/"><LayoutDashboard /> Dashboard</a>
-        <a className={route === "admin" ? "active" : ""} href="#/admin"><Settings2 /> Admin</a>
       </nav>
     </header>
   );
