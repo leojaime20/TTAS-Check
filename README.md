@@ -20,4 +20,6 @@ GitHub Actions rebuilds and deploys the site automatically. A local import is st
 
 ## Required columns
 
-`SSOP`, `TAP`, `EX`, `PIMS Punch`, `SPIE`, `NR13`, `SIG`, `TagLines`, `TOOLs`, `TRAINING`, `F.Status`, `Primeiro Description`
+`SSOP`, `TAP`, `EX`, `PIMS Punch`, `SPIE`, `NR13`, `SIG`, `TagLines`, `TOOLs`, `TRAINING`, `CTO`, `F.Status`, `Primeiro Description`
+
+`CTO` accepts `OK` or `Check`. `Check` is displayed as a separate fiscal-review alert and does not automatically change requirement completion.

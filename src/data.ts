@@ -1,13 +1,18 @@
 import * as XLSX from "xlsx";
-import { REQUIREMENTS, type RequirementStatus, type TtasRecord, type ValidationResult } from "./types";
+import { REQUIREMENTS, type CtoStatus, type RequirementStatus, type TtasRecord, type ValidationResult } from "./types";
 
-export const LOCAL_DATA_KEY = "ttas-check-data-v2";
-export const LOCAL_META_KEY = "ttas-check-meta-v2";
+export const LOCAL_DATA_KEY = "ttas-check-data-v3";
+export const LOCAL_META_KEY = "ttas-check-meta-v3";
 
-const LEGACY_LOCAL_DATA_KEYS = ["ttas-check-data-v1", "ttas-check-meta-v1"];
+const LEGACY_LOCAL_DATA_KEYS = ["ttas-check-data-v1", "ttas-check-meta-v1", "ttas-check-data-v2", "ttas-check-meta-v2"];
 
 const DESCRIPTION_HEADER = "Primeiro Description";
-const REQUIRED_HEADERS = ["SSOP", ...REQUIREMENTS.map((item) => item.source), DESCRIPTION_HEADER];
+const CTO_HEADER = "CTO";
+const REQUIRED_HEADERS = [
+  "SSOP",
+  ...REQUIREMENTS.flatMap((item) => item.isFinal ? [CTO_HEADER, item.source] : [item.source]),
+  DESCRIPTION_HEADER,
+];
 
 function cleanHeader(value: unknown): string {
   return String(value ?? "").replace(/^\ufeff/, "").trim();
@@ -17,6 +22,13 @@ function normalizeStatus(value: unknown): RequirementStatus | null {
   const normalized = String(value ?? "").trim().toUpperCase();
   if (["OK", "YES", "Y", "TRUE", "COMPLETE", "COMPLETED"].includes(normalized)) return "OK";
   if (["NOK", "NO", "N", "FALSE", "OPEN", "INCOMPLETE", "NOT OK"].includes(normalized)) return "NOK";
+  return null;
+}
+
+function normalizeCtoStatus(value: unknown): CtoStatus | null {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  if (normalized === "OK") return "OK";
+  if (normalized === "CHECK") return "CHECK";
   return null;
 }
 
@@ -50,7 +62,12 @@ export function recordsFromRows(rows: unknown[][], fileName = "dataset"): Valida
     seen.add(ssop);
 
     const statuses = {} as Record<(typeof REQUIREMENTS)[number]["key"], RequirementStatus>;
+    const cto = normalizeCtoStatus(row[column[CTO_HEADER]]);
     let valid = true;
+    if (!cto) {
+      errors.push(`Row ${displayRow}, ${CTO_HEADER}: use OK or Check.`);
+      valid = false;
+    }
     REQUIREMENTS.forEach((requirement) => {
       const status = normalizeStatus(row[column[requirement.source]]);
       if (!status) {
@@ -61,8 +78,8 @@ export function recordsFromRows(rows: unknown[][], fileName = "dataset"): Valida
       }
     });
 
-    if (valid && description && !records.some((record) => record.ssop === ssop)) {
-      records.push({ ssop, description, ...statuses });
+    if (valid && cto && description && !records.some((record) => record.ssop === ssop)) {
+      records.push({ ssop, description, cto, ...statuses });
     }
   });
 
@@ -93,6 +110,7 @@ export async function loadPublishedData(): Promise<TtasRecord[]> {
           const candidate = record as Record<string, unknown>;
           return typeof candidate.ssop === "string"
             && typeof candidate.description === "string"
+            && ["OK", "CHECK"].includes(String(candidate.cto))
             && REQUIREMENTS.every((requirement) => ["OK", "NOK"].includes(String(candidate[requirement.key])));
         });
       if (isCurrentDataset) return parsed as TtasRecord[];
@@ -128,7 +146,10 @@ export function clearLocalData(): void {
 export function recordsToCsv(records: TtasRecord[]): string {
   const rows = records.map((record) => {
     const output: Record<string, string> = { SSOP: record.ssop };
-    REQUIREMENTS.forEach((requirement) => { output[requirement.source] = record[requirement.key]; });
+    REQUIREMENTS.forEach((requirement) => {
+      if (requirement.isFinal) output[CTO_HEADER] = record.cto === "CHECK" ? "Check" : "OK";
+      output[requirement.source] = record[requirement.key];
+    });
     output[DESCRIPTION_HEADER] = record.description;
     return output;
   });

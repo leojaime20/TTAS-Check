@@ -19,7 +19,7 @@ import {
   UploadCloud,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   clearLocalData,
   downloadCsv,
@@ -48,6 +48,17 @@ function StatusMark({ ok, label, isFinal = false }: { ok: boolean; label: string
     <span className={`status-mark ${ok ? (isFinal ? "status-finished" : "status-ok") : "status-open"}`} title={`${label}: ${state}`}>
       {ok ? (isFinal ? <Flag aria-hidden="true" /> : <Check aria-hidden="true" />) : <X aria-hidden="true" />}
       <span className="sr-only">{`${label}: ${state}`}</span>
+    </span>
+  );
+}
+
+function CtoMark({ status }: { status: TtasRecord["cto"] }) {
+  const requiresReview = status === "CHECK";
+  const label = requiresReview ? "CTO: Fiscal review required" : "CTO: Clear";
+  return (
+    <span className={`status-mark cto-mark ${requiresReview ? "cto-review" : "cto-clear"}`} title={label}>
+      {requiresReview ? <CircleAlert aria-hidden="true" /> : <Check aria-hidden="true" />}
+      <span className="sr-only">{label}</span>
     </span>
   );
 }
@@ -102,11 +113,20 @@ function RecordDrawer({ record, onClose }: { record: TtasRecord; onClose: () => 
           {REQUIREMENTS.map((requirement) => {
             const ok = record[requirement.key] === "OK";
             return (
-              <div className="requirement-item" key={requirement.key}>
-                <StatusMark ok={ok} label={requirement.label} isFinal={requirement.isFinal} />
-                <span>{requirement.label}</span>
-                <strong className={ok ? (requirement.isFinal ? "text-finished" : "text-ok") : "text-open"}>{ok ? (requirement.isFinal ? "Finished" : "Complete") : "Open"}</strong>
-              </div>
+              <Fragment key={requirement.key}>
+                {requirement.isFinal && (
+                  <div className={`cto-review-item ${record.cto === "CHECK" ? "needs-review" : "is-clear"}`}>
+                    <CtoMark status={record.cto} />
+                    <div><span>CTO fiscal review</span><small>{record.cto === "CHECK" ? "Confirm whether this CTO blocks sign-off." : "No fiscal review flagged."}</small></div>
+                    <strong>{record.cto === "CHECK" ? "Review required" : "Clear"}</strong>
+                  </div>
+                )}
+                <div className="requirement-item">
+                  <StatusMark ok={ok} label={requirement.label} isFinal={requirement.isFinal} />
+                  <span>{requirement.label}</span>
+                  <strong className={ok ? (requirement.isFinal ? "text-finished" : "text-ok") : "text-open"}>{ok ? (requirement.isFinal ? "Finished" : "Complete") : "Open"}</strong>
+                </div>
+              </Fragment>
             );
           })}
         </div>
@@ -119,6 +139,7 @@ function Dashboard({ records, sourceLabel }: { records: TtasRecord[]; sourceLabe
   const [ssopQuery, setSsopQuery] = useState("");
   const [descriptionQuery, setDescriptionQuery] = useState("");
   const [readiness, setReadiness] = useState("all");
+  const [ctoFilter, setCtoFilter] = useState("all");
   const [sort, setSort] = useState("ssop-asc");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<TtasRecord | null>(null);
@@ -131,27 +152,30 @@ function Dashboard({ records, sourceLabel }: { records: TtasRecord[]; sourceLabe
   const totalRequirements = records.length * REQUIREMENTS.length;
   const completion = totalRequirements ? Math.round((completedRequirements / totalRequirements) * 100) : 0;
   const openRequirements = totalRequirements - completedRequirements;
+  const ctoReviewCount = useMemo(() => records.filter((record) => record.cto === "CHECK").length, [records]);
 
   const filtered = useMemo(() => {
     const bySsop = ssopQuery.trim().toLowerCase();
     const byDescription = descriptionQuery.trim().toLowerCase();
     const result = records.filter((record) => {
       const readinessMatch = readiness === "all" || (readiness === "ready" ? isReady(record) : !isReady(record));
+      const ctoMatch = ctoFilter === "all" || (ctoFilter === "review" ? record.cto === "CHECK" : record.cto === "OK");
       return record.ssop.toLowerCase().includes(bySsop)
         && record.description.toLowerCase().includes(byDescription)
-        && readinessMatch;
+        && readinessMatch
+        && ctoMatch;
     });
     return result.sort((a, b) => {
       if (sort === "ssop-desc") return b.ssop.localeCompare(a.ssop, undefined, { numeric: true });
       if (sort === "completion") return completeCount(b) - completeCount(a) || a.ssop.localeCompare(b.ssop, undefined, { numeric: true });
       return a.ssop.localeCompare(b.ssop, undefined, { numeric: true });
     });
-  }, [descriptionQuery, readiness, records, sort, ssopQuery]);
+  }, [ctoFilter, descriptionQuery, readiness, records, sort, ssopQuery]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  useEffect(() => setPage(1), [ssopQuery, descriptionQuery, readiness, sort]);
+  useEffect(() => setPage(1), [ssopQuery, descriptionQuery, readiness, ctoFilter, sort]);
   useEffect(() => {
     if (!selected) return;
     const close = (event: KeyboardEvent) => event.key === "Escape" && setSelected(null);
@@ -177,29 +201,35 @@ function Dashboard({ records, sourceLabel }: { records: TtasRecord[]; sourceLabe
         <SummaryCard icon={<CircleAlert />} label="Open requirements" value={openRequirements.toLocaleString()} detail={`Across ${(records.length - readyCount).toLocaleString()} SSOPs`} />
       </section>
 
+      <section className={`cto-review-banner ${ctoReviewCount ? "has-reviews" : "all-clear"}`} aria-label="CTO fiscal review status">
+        <span className="cto-review-icon">{ctoReviewCount ? <CircleAlert /> : <ShieldCheck />}</span>
+        <div><span>Fiscal review queue</span><strong>{ctoReviewCount ? `${ctoReviewCount.toLocaleString()} CTO checks require fiscal review` : "No CTO fiscal reviews required"}</strong><p>CTO alerts are shown separately and do not change the requirement completion calculation.</p></div>
+      </section>
+
       <section className="tracker-panel">
         <div className="filter-row">
           <label><span>SSOP</span><div className="input-wrap"><Search /><input value={ssopQuery} onChange={(event) => setSsopQuery(event.target.value)} placeholder="Search SSOP" /></div></label>
           <label className="description-filter"><span>Description</span><div className="input-wrap"><Search /><input value={descriptionQuery} onChange={(event) => setDescriptionQuery(event.target.value)} placeholder="Search description" /></div></label>
           <label><span>Readiness</span><select value={readiness} onChange={(event) => setReadiness(event.target.value)}><option value="all">All statuses</option><option value="ready">Ready to sign</option><option value="not-ready">Not ready</option></select></label>
+          <label><span>CTO</span><select value={ctoFilter} onChange={(event) => setCtoFilter(event.target.value)}><option value="all">All CTO statuses</option><option value="review">Fiscal review required</option><option value="clear">Clear</option></select></label>
           <label><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="ssop-asc">SSOP ascending</option><option value="ssop-desc">SSOP descending</option><option value="completion">Most complete</option></select></label>
-          <button className="clear-button" onClick={() => { setSsopQuery(""); setDescriptionQuery(""); setReadiness("all"); setSort("ssop-asc"); }}><RefreshCw /> Reset</button>
+          <button className="clear-button" onClick={() => { setSsopQuery(""); setDescriptionQuery(""); setReadiness("all"); setCtoFilter("all"); setSort("ssop-asc"); }}><RefreshCw /> Reset</button>
         </div>
 
         <div className="table-meta">
           <div><strong>{filtered.length.toLocaleString()}</strong> SSOP{filtered.length === 1 ? "" : "s"} shown</div>
-          <div className="legend"><span><i className="legend-dot ok" /> Complete</span><span><Flag className="legend-flag" /> Finished</span><span><i className="legend-dot open" /> Open</span></div>
+          <div className="legend"><span><i className="legend-dot ok" /> Complete</span><span><CircleAlert className="legend-cto" /> Fiscal review</span><span><Flag className="legend-flag" /> Finished</span><span><i className="legend-dot open" /> Open</span></div>
         </div>
 
         <div className="table-scroll">
           <table>
-            <thead><tr><th className="ssop-column">SSOP</th><th className="description-column">Description</th>{REQUIREMENTS.map((requirement) => <th className={`status-column ${requirement.isFinal ? "final-status-column" : ""}`} key={requirement.key} title={requirement.label}>{requirement.short}</th>)}<th className="action-column"><span className="sr-only">Details</span></th></tr></thead>
+            <thead><tr><th className="ssop-column">SSOP</th><th className="description-column">Description</th>{REQUIREMENTS.map((requirement) => <Fragment key={requirement.key}>{requirement.isFinal && <th className="status-column cto-status-column" title="CTO fiscal review">CTO</th>}<th className={`status-column ${requirement.isFinal ? "final-status-column" : ""}`} title={requirement.label}>{requirement.short}</th></Fragment>)}<th className="action-column"><span className="sr-only">Details</span></th></tr></thead>
             <tbody>
               {visible.map((record) => (
                 <tr key={record.ssop} className={isReady(record) ? "row-ready" : ""} onClick={() => setSelected(record)}>
                   <td><button className="ssop-button" onClick={() => setSelected(record)}>{record.ssop}</button></td>
                   <td className="record-description" title={record.description}>{record.description}</td>
-                  {REQUIREMENTS.map((requirement) => <td className={`status-cell ${requirement.isFinal ? "final-status-cell" : ""}`} key={requirement.key}><StatusMark ok={record[requirement.key] === "OK"} label={requirement.label} isFinal={requirement.isFinal} /></td>)}
+                  {REQUIREMENTS.map((requirement) => <Fragment key={requirement.key}>{requirement.isFinal && <td className="status-cell cto-status-cell"><CtoMark status={record.cto} /></td>}<td className={`status-cell ${requirement.isFinal ? "final-status-cell" : ""}`}><StatusMark ok={record[requirement.key] === "OK"} label={requirement.label} isFinal={requirement.isFinal} /></td></Fragment>)}
                   <td><button className="row-action" aria-label={`View ${record.ssop} details`}><ChevronRight /></button></td>
                 </tr>
               ))}

@@ -13,10 +13,12 @@ export const REQUIREMENTS = [
 
 export type RequirementKey = (typeof REQUIREMENTS)[number]["key"];
 export type RequirementStatus = "OK" | "NOK";
+export type CtoStatus = "OK" | "CHECK";
 
 export type TtasRecord = {
   ssop: string;
   description: string;
+  cto: CtoStatus;
 } & Record<RequirementKey, RequirementStatus>;
 
 export type ValidationResult = {
