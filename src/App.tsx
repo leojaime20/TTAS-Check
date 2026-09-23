@@ -10,6 +10,7 @@ import {
   Download,
   FileCheck2,
   FileSpreadsheet,
+  Flag,
   Gauge,
   LayoutDashboard,
   RefreshCw,
@@ -41,11 +42,12 @@ function completeCount(record: TtasRecord): number {
   return REQUIREMENTS.filter((requirement) => record[requirement.key] === "OK").length;
 }
 
-function StatusMark({ ok, label }: { ok: boolean; label: string }) {
+function StatusMark({ ok, label, isFinal = false }: { ok: boolean; label: string; isFinal?: boolean }) {
+  const state = ok ? (isFinal ? "Finished" : "Complete") : "Open";
   return (
-    <span className={`status-mark ${ok ? "status-ok" : "status-open"}`} title={`${label}: ${ok ? "OK" : "NOK"}`}>
-      {ok ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
-      <span className="sr-only">{`${label}: ${ok ? "OK" : "NOK"}`}</span>
+    <span className={`status-mark ${ok ? (isFinal ? "status-finished" : "status-ok") : "status-open"}`} title={`${label}: ${state}`}>
+      {ok ? (isFinal ? <Flag aria-hidden="true" /> : <Check aria-hidden="true" />) : <X aria-hidden="true" />}
+      <span className="sr-only">{`${label}: ${state}`}</span>
     </span>
   );
 }
@@ -90,8 +92,8 @@ function RecordDrawer({ record, onClose }: { record: TtasRecord; onClose: () => 
         <h2 id="record-title">{record.ssop}</h2>
         <p className="drawer-description">{record.description}</p>
         <div className={`readiness-callout ${ready ? "ready" : "pending"}`}>
-          {ready ? <CheckCircle2 /> : <CircleAlert />}
-          <div><strong>{ready ? "Ready for sign-off" : "Requirements remain open"}</strong><span>{completed} of {REQUIREMENTS.length} complete</span></div>
+          {ready ? <Flag /> : <CircleAlert />}
+          <div><strong>{ready ? "Final step completed" : "Requirements remain open"}</strong><span>{completed} of {REQUIREMENTS.length} complete</span></div>
         </div>
         <div className="progress-track" aria-label={`${completed} of ${REQUIREMENTS.length} requirements complete`}>
           <span style={{ width: `${(completed / REQUIREMENTS.length) * 100}%` }} />
@@ -101,9 +103,9 @@ function RecordDrawer({ record, onClose }: { record: TtasRecord; onClose: () => 
             const ok = record[requirement.key] === "OK";
             return (
               <div className="requirement-item" key={requirement.key}>
-                <StatusMark ok={ok} label={requirement.label} />
+                <StatusMark ok={ok} label={requirement.label} isFinal={requirement.isFinal} />
                 <span>{requirement.label}</span>
-                <strong className={ok ? "text-ok" : "text-open"}>{ok ? "Complete" : "Open"}</strong>
+                <strong className={ok ? (requirement.isFinal ? "text-finished" : "text-ok") : "text-open"}>{ok ? (requirement.isFinal ? "Finished" : "Complete") : "Open"}</strong>
               </div>
             );
           })}
@@ -186,18 +188,18 @@ function Dashboard({ records, sourceLabel }: { records: TtasRecord[]; sourceLabe
 
         <div className="table-meta">
           <div><strong>{filtered.length.toLocaleString()}</strong> SSOP{filtered.length === 1 ? "" : "s"} shown</div>
-          <div className="legend"><span><i className="legend-dot ok" /> Complete</span><span><i className="legend-dot open" /> Open</span></div>
+          <div className="legend"><span><i className="legend-dot ok" /> Complete</span><span><Flag className="legend-flag" /> Finished</span><span><i className="legend-dot open" /> Open</span></div>
         </div>
 
         <div className="table-scroll">
           <table>
-            <thead><tr><th className="ssop-column">SSOP</th><th className="description-column">Description</th>{REQUIREMENTS.map((requirement) => <th className="status-column" key={requirement.key} title={requirement.label}>{requirement.short}</th>)}<th className="action-column"><span className="sr-only">Details</span></th></tr></thead>
+            <thead><tr><th className="ssop-column">SSOP</th><th className="description-column">Description</th>{REQUIREMENTS.map((requirement) => <th className={`status-column ${requirement.isFinal ? "final-status-column" : ""}`} key={requirement.key} title={requirement.label}>{requirement.short}</th>)}<th className="action-column"><span className="sr-only">Details</span></th></tr></thead>
             <tbody>
               {visible.map((record) => (
                 <tr key={record.ssop} className={isReady(record) ? "row-ready" : ""} onClick={() => setSelected(record)}>
                   <td><button className="ssop-button" onClick={() => setSelected(record)}>{record.ssop}</button></td>
                   <td className="record-description" title={record.description}>{record.description}</td>
-                  {REQUIREMENTS.map((requirement) => <td className="status-cell" key={requirement.key}><StatusMark ok={record[requirement.key] === "OK"} label={requirement.label} /></td>)}
+                  {REQUIREMENTS.map((requirement) => <td className={`status-cell ${requirement.isFinal ? "final-status-cell" : ""}`} key={requirement.key}><StatusMark ok={record[requirement.key] === "OK"} label={requirement.label} isFinal={requirement.isFinal} /></td>)}
                   <td><button className="row-action" aria-label={`View ${record.ssop} details`}><ChevronRight /></button></td>
                 </tr>
               ))}

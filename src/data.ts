@@ -1,8 +1,10 @@
 import * as XLSX from "xlsx";
 import { REQUIREMENTS, type RequirementStatus, type TtasRecord, type ValidationResult } from "./types";
 
-export const LOCAL_DATA_KEY = "ttas-check-data-v1";
-export const LOCAL_META_KEY = "ttas-check-meta-v1";
+export const LOCAL_DATA_KEY = "ttas-check-data-v2";
+export const LOCAL_META_KEY = "ttas-check-meta-v2";
+
+const LEGACY_LOCAL_DATA_KEYS = ["ttas-check-data-v1", "ttas-check-meta-v1"];
 
 const DESCRIPTION_HEADER = "Primeiro Description";
 const REQUIRED_HEADERS = ["SSOP", ...REQUIREMENTS.map((item) => item.source), DESCRIPTION_HEADER];
@@ -79,17 +81,30 @@ export async function parseSpreadsheet(file: File): Promise<ValidationResult> {
 }
 
 export async function loadPublishedData(): Promise<TtasRecord[]> {
+  LEGACY_LOCAL_DATA_KEYS.forEach((key) => localStorage.removeItem(key));
   const stored = localStorage.getItem(LOCAL_DATA_KEY);
   if (stored) {
     try {
-      const parsed = JSON.parse(stored) as TtasRecord[];
-      if (Array.isArray(parsed) && parsed.length) return parsed;
+      const parsed = JSON.parse(stored) as unknown;
+      const isCurrentDataset = Array.isArray(parsed)
+        && parsed.length > 0
+        && parsed.every((record) => {
+          if (!record || typeof record !== "object") return false;
+          const candidate = record as Record<string, unknown>;
+          return typeof candidate.ssop === "string"
+            && typeof candidate.description === "string"
+            && REQUIREMENTS.every((requirement) => ["OK", "NOK"].includes(String(candidate[requirement.key])));
+        });
+      if (isCurrentDataset) return parsed as TtasRecord[];
+      localStorage.removeItem(LOCAL_DATA_KEY);
+      localStorage.removeItem(LOCAL_META_KEY);
     } catch {
       localStorage.removeItem(LOCAL_DATA_KEY);
+      localStorage.removeItem(LOCAL_META_KEY);
     }
   }
 
-  const response = await fetch(`${import.meta.env.BASE_URL}data/ttas.csv`);
+  const response = await fetch(`${import.meta.env.BASE_URL}data/ttas.csv?refresh=${Date.now()}`, { cache: "no-store" });
   if (!response.ok) throw new Error("The published dataset could not be loaded.");
   const csv = await response.text();
   const workbook = XLSX.read(csv, { type: "string" });
@@ -107,6 +122,7 @@ export function saveLocalData(records: TtasRecord[], fileName: string): void {
 export function clearLocalData(): void {
   localStorage.removeItem(LOCAL_DATA_KEY);
   localStorage.removeItem(LOCAL_META_KEY);
+  LEGACY_LOCAL_DATA_KEYS.forEach((key) => localStorage.removeItem(key));
 }
 
 export function recordsToCsv(records: TtasRecord[]): string {

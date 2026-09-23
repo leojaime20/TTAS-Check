@@ -20,4 +20,4 @@ GitHub Actions rebuilds and deploys the site automatically. A local import is st
 
 ## Required columns
 
-`SSOP`, `TAP`, `EX`, `NR13`, `PIMS Punch`, `SPIE`, `SIG`, `TOOLs`, `TRAINING`, `F.Status`, `Primeiro Description`
+`SSOP`, `TAP`, `EX`, `PIMS Punch`, `SPIE`, `NR13`, `SIG`, `TagLines`, `TOOLs`, `TRAINING`, `F.Status`, `Primeiro Description`
