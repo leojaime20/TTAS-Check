@@ -61,14 +61,6 @@ h1 { margin: 6px 0 6px; font-size: clamp(28px, 3.1vw, 44px); line-height: 1.06; 
 .tone-green .summary-icon { color: var(--green-700); background: var(--green-100); }
 .tone-yellow { border-top: 3px solid var(--yellow); }
 .tone-yellow .summary-icon { color: #745c00; background: var(--yellow-soft); }
-.cto-review-banner { min-height: 78px; display: flex; align-items: center; gap: 14px; margin-bottom: 18px; padding: 15px 18px; border: 1px solid; border-radius: 15px; }
-.cto-review-banner.has-reviews { color: #6b5200; background: #fff7d7; border-color: #ead179; }
-.cto-review-banner.all-clear { color: var(--green-800); background: var(--green-100); border-color: #c9e8d6; }
-.cto-review-icon { width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; background: rgba(255,255,255,.68); border-radius: 12px; }
-.cto-review-icon svg { width: 21px; }
-.cto-review-banner div > span { display: block; margin-bottom: 2px; font-size: 9px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
-.cto-review-banner strong { display: block; color: var(--ink); font-size: 14px; }
-.cto-review-banner p { margin: 2px 0 0; font-size: 10px; opacity: .78; }
 
 .tracker-panel, .admin-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); overflow: hidden; }
 .filter-row { display: grid; grid-template-columns: minmax(135px,.7fr) minmax(230px,1.4fr) repeat(3,minmax(140px,.7fr)) auto; gap: 12px; align-items: end; padding: 18px; border-bottom: 1px solid var(--line); }
@@ -225,7 +217,6 @@ footer { display: flex; justify-content: space-between; gap: 16px; padding: 18px
   .page-shell, .admin-page { width: min(100% - 24px, 1600px); padding-top: 24px; }.hero-row { align-items: flex-start; flex-direction: column; gap: 13px; }.source-pill { align-self: flex-start; }h1 { font-size: 30px; }
   .summary-grid { grid-template-columns: 1fr 1fr; gap: 9px; }.summary-card { min-height: 126px; padding: 14px; flex-direction: column; gap: 8px; }.summary-card strong { font-size: 21px; }
   .filter-row { grid-template-columns: 1fr; }.filter-row label, .clear-button { grid-column: auto; }.table-meta { align-items: flex-start; flex-direction: column; padding-top: 12px; padding-bottom: 12px; }.legend { flex-wrap: wrap; gap: 10px 15px; }.table-scroll { max-height: 62vh; }table { min-width: 1250px; }
-  .cto-review-banner { align-items: flex-start; }.cto-review-banner p { line-height: 1.45; }
   .record-drawer { padding: 24px; }
   .workflow-strip { grid-template-columns: 1fr; gap: 9px; }.workflow-strip > svg { display: none; }.admin-sidebar { grid-template-columns: 1fr; }.upload-zone { min-height: 240px; padding: 24px 14px; }.button-row { display: grid; }.validation-stats { flex-wrap: wrap; }
   footer { flex-direction: column; }

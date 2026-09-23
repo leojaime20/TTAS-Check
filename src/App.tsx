@@ -152,7 +152,6 @@ function Dashboard({ records, sourceLabel }: { records: TtasRecord[]; sourceLabe
   const totalRequirements = records.length * REQUIREMENTS.length;
   const completion = totalRequirements ? Math.round((completedRequirements / totalRequirements) * 100) : 0;
   const openRequirements = totalRequirements - completedRequirements;
-  const ctoReviewCount = useMemo(() => records.filter((record) => record.cto === "CHECK").length, [records]);
 
   const filtered = useMemo(() => {
     const bySsop = ssopQuery.trim().toLowerCase();
@@ -199,11 +198,6 @@ function Dashboard({ records, sourceLabel }: { records: TtasRecord[]; sourceLabe
         <SummaryCard icon={<ShieldCheck />} label="Ready to sign" value={readyCount.toLocaleString()} detail={`${records.length ? Math.round((readyCount / records.length) * 100) : 0}% of all SSOPs`} tone="green" />
         <SummaryCard icon={<Gauge />} label="Requirements complete" value={`${completion}%`} detail={`${completedRequirements.toLocaleString()} of ${totalRequirements.toLocaleString()}`} tone="yellow" />
         <SummaryCard icon={<CircleAlert />} label="Open requirements" value={openRequirements.toLocaleString()} detail={`Across ${(records.length - readyCount).toLocaleString()} SSOPs`} />
-      </section>
-
-      <section className={`cto-review-banner ${ctoReviewCount ? "has-reviews" : "all-clear"}`} aria-label="CTO fiscal review status">
-        <span className="cto-review-icon">{ctoReviewCount ? <CircleAlert /> : <ShieldCheck />}</span>
-        <div><span>Fiscal review queue</span><strong>{ctoReviewCount ? `${ctoReviewCount.toLocaleString()} CTO checks require fiscal review` : "No CTO fiscal reviews required"}</strong><p>CTO alerts are shown separately and do not change the requirement completion calculation.</p></div>
       </section>
 
       <section className="tracker-panel">
