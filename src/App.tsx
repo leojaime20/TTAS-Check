@@ -83,7 +83,7 @@ function Header({ route, updatedAt }: { route: string; updatedAt: string }) {
         <span><strong>TTAS</strong> Check</span>
       </a>
       <div className="topbar-actions">
-        {updatedLabel && <div className="data-updated" aria-label={`Data updated ${updatedLabel}`}><CalendarDays /><span><span className="data-updated-prefix">Data updated</span><strong>{updatedLabel}</strong></span></div>}
+        {updatedLabel && <div className="data-updated" aria-label={`Last update ${updatedLabel}`}><CalendarDays /><span><span className="data-updated-prefix">Last update</span><strong>{updatedLabel}</strong></span></div>}
         <nav aria-label="Primary navigation">
           <a className={route !== "admin" ? "active" : ""} href="#/"><LayoutDashboard /> Dashboard</a>
         </nav>
