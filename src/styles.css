@@ -38,6 +38,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; background: var(--yellow); color: var(--green-950); border-radius: 10px 10px 10px 3px; }
 .brand-mark svg { width: 20px; stroke-width: 3; }
 .topbar nav { display: flex; align-items: center; gap: 8px; }
+.topbar-actions { display: flex; align-items: center; gap: 12px; }
+.data-updated { min-height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 11px; color: rgba(255,255,255,.72); background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; font-size: 10px; }
+.data-updated svg { width: 15px; }
+.data-updated > span { display: flex; align-items: center; gap: 5px; }
+.data-updated strong { color: white; font-size: 10px; }
 .topbar nav a { color: rgba(255,255,255,.72); text-decoration: none; display: flex; align-items: center; gap: 8px; padding: 10px 15px; font-size: 13px; font-weight: 700; border-radius: 10px; transition: .18s ease; }
 .topbar nav a svg { width: 17px; }
 .topbar nav a:hover, .topbar nav a.active { color: white; background: rgba(255,255,255,.11); }
@@ -85,7 +90,7 @@ input:focus, select:focus { background: white; border-color: var(--green-600); }
 .legend-cto { width: 13px; color: #9a6c00; fill: #ffe49a; stroke-width: 2.4; }
 
 .table-scroll { overflow: auto; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-table { width: 100%; min-width: 1310px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+table { width: 100%; min-width: 900px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
 thead th { height: 42px; position: sticky; top: 0; z-index: 2; color: #5d7169; background: #f2f6f4; border-bottom: 1px solid #d7e2dd; font-size: 9px; font-weight: 800; letter-spacing: .055em; text-align: left; text-transform: uppercase; }
 th, td { padding: 0 10px; }
 .ssop-column { width: 112px; padding-left: 18px; }
@@ -213,10 +218,10 @@ footer { display: flex; justify-content: space-between; gap: 16px; padding: 18px
   .admin-grid { grid-template-columns: 1fr; }.admin-sidebar { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 700px) {
-  .topbar { height: 64px; padding: 0 15px; }.topbar nav a { width: 40px; height: 40px; justify-content: center; padding: 0; }.topbar nav a { font-size: 0; }.topbar nav a svg { width: 18px; }.brand { font-size: 16px; }.brand-mark { width: 31px; height: 31px; }
+  .topbar { height: 64px; padding: 0 15px; }.topbar-actions { gap: 6px; }.data-updated { min-height: 34px; gap: 5px; padding: 0 8px; }.data-updated-prefix { display: none; }.data-updated strong { font-size: 9px; }.topbar nav a { width: 40px; height: 40px; justify-content: center; padding: 0; }.topbar nav a { font-size: 0; }.topbar nav a svg { width: 18px; }.brand { font-size: 16px; }.brand-mark { width: 31px; height: 31px; }
   .page-shell, .admin-page { width: min(100% - 24px, 1600px); padding-top: 24px; }.hero-row { align-items: flex-start; flex-direction: column; gap: 13px; }.source-pill { align-self: flex-start; }h1 { font-size: 30px; }
   .summary-grid { grid-template-columns: 1fr 1fr; gap: 9px; }.summary-card { min-height: 126px; padding: 14px; flex-direction: column; gap: 8px; }.summary-card strong { font-size: 21px; }
-  .filter-row { grid-template-columns: 1fr; }.filter-row label, .clear-button { grid-column: auto; }.table-meta { align-items: flex-start; flex-direction: column; padding-top: 12px; padding-bottom: 12px; }.legend { flex-wrap: wrap; gap: 10px 15px; }.table-scroll { max-height: 62vh; }table { min-width: 1250px; }
+  .filter-row { grid-template-columns: 1fr; }.filter-row label, .clear-button { grid-column: auto; }.table-meta { align-items: flex-start; flex-direction: column; padding-top: 12px; padding-bottom: 12px; }.legend { flex-wrap: wrap; gap: 10px 15px; }.table-scroll { max-height: 62vh; }
   .record-drawer { padding: 24px; }
   .workflow-strip { grid-template-columns: 1fr; gap: 9px; }.workflow-strip > svg { display: none; }.admin-sidebar { grid-template-columns: 1fr; }.upload-zone { min-height: 240px; padding: 24px 14px; }.button-row { display: grid; }.validation-stats { flex-wrap: wrap; }
   footer { flex-direction: column; }

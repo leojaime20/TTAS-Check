@@ -7,7 +7,9 @@
     "node": ">=22.13.0"
   },
   "scripts": {
+    "predev": "node scripts/generate-data-metadata.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/generate-data-metadata.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "check": "tsc -b --pretty false"

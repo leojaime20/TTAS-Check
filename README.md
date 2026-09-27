@@ -18,8 +18,10 @@ npm run dev
 
 GitHub Actions rebuilds and deploys the site automatically. A local import is stored only in that browser; no database or credentials are used.
 
-## Required columns
+The dashboard discovers requirement columns automatically. `SSOP`, `CTO`, `F.Status`, and `Primeiro Description` are reserved; every other column is treated as an `OK`/`NOK` requirement in CSV order. The green header displays the date of the latest commit that changed `public/data/ttas.csv`.
 
-`SSOP`, `TAP`, `EX`, `PIMS Punch`, `SPIE`, `NR13`, `SIG`, `TagLines`, `TOOLs`, `TRAINING`, `CTO`, `F.Status`, `Primeiro Description`
+## Reserved columns
+
+`SSOP`, `CTO`, `F.Status`, `Primeiro Description`
 
 `CTO` accepts `OK` or `Check`. `Check` is displayed as a separate fiscal-review alert and does not automatically change requirement completion.

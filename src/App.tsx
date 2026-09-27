@@ -1,6 +1,7 @@
 import {
   ArrowDownAZ,
   ArrowUpRight,
+  CalendarDays,
   Check,
   CheckCircle2,
   ChevronLeft,
@@ -29,17 +30,27 @@ import {
   parseSpreadsheet,
   saveLocalData,
 } from "./data";
-import { REQUIREMENTS, type TtasRecord, type ValidationResult } from "./types";
+import type { RequirementDefinition, TtasDataset, TtasRecord, ValidationResult } from "./types";
 
 const PAGE_SIZE = 50;
 const REPOSITORY_UPLOAD_URL = "https://github.com/leojaime20/TTAS-Check/upload/main/public/data";
 
-function isReady(record: TtasRecord): boolean {
-  return REQUIREMENTS.every((requirement) => record[requirement.key] === "OK");
+function isReady(record: TtasRecord, requirements: RequirementDefinition[]): boolean {
+  return requirements.every((requirement) => record.statuses[requirement.source] === "OK");
 }
 
-function completeCount(record: TtasRecord): number {
-  return REQUIREMENTS.filter((requirement) => record[requirement.key] === "OK").length;
+function completeCount(record: TtasRecord, requirements: RequirementDefinition[]): number {
+  return requirements.filter((requirement) => record.statuses[requirement.source] === "OK").length;
+}
+
+function formatDataDate(value: string): string {
+  if (!value) return "";
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const date = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date);
 }
 
 function StatusMark({ ok, label, isFinal = false }: { ok: boolean; label: string; isFinal?: boolean }) {
@@ -63,16 +74,20 @@ function CtoMark({ status }: { status: TtasRecord["cto"] }) {
   );
 }
 
-function Header({ route }: { route: string }) {
+function Header({ route, updatedAt }: { route: string; updatedAt: string }) {
+  const updatedLabel = formatDataDate(updatedAt);
   return (
     <header className="topbar">
       <a className="brand" href="#/" aria-label="TTAS Check dashboard">
         <span className="brand-mark" aria-hidden="true"><Check /></span>
         <span><strong>TTAS</strong> Check</span>
       </a>
-      <nav aria-label="Primary navigation">
-        <a className={route !== "admin" ? "active" : ""} href="#/"><LayoutDashboard /> Dashboard</a>
-      </nav>
+      <div className="topbar-actions">
+        {updatedLabel && <div className="data-updated" aria-label={`Data updated ${updatedLabel}`}><CalendarDays /><span><span className="data-updated-prefix">Data updated</span><strong>{updatedLabel}</strong></span></div>}
+        <nav aria-label="Primary navigation">
+          <a className={route !== "admin" ? "active" : ""} href="#/"><LayoutDashboard /> Dashboard</a>
+        </nav>
+      </div>
     </header>
   );
 }
@@ -92,9 +107,9 @@ function SummaryCard({ icon, label, value, detail, tone = "default" }: {
   );
 }
 
-function RecordDrawer({ record, onClose }: { record: TtasRecord; onClose: () => void }) {
-  const completed = completeCount(record);
-  const ready = isReady(record);
+function RecordDrawer({ record, requirements, onClose }: { record: TtasRecord; requirements: RequirementDefinition[]; onClose: () => void }) {
+  const completed = completeCount(record, requirements);
+  const ready = isReady(record, requirements);
   return (
     <div className="drawer-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <aside className="record-drawer" role="dialog" aria-modal="true" aria-labelledby="record-title">
@@ -104,16 +119,16 @@ function RecordDrawer({ record, onClose }: { record: TtasRecord; onClose: () => 
         <p className="drawer-description">{record.description}</p>
         <div className={`readiness-callout ${ready ? "ready" : "pending"}`}>
           {ready ? <Flag /> : <CircleAlert />}
-          <div><strong>{ready ? "Final step completed" : "Requirements remain open"}</strong><span>{completed} of {REQUIREMENTS.length} complete</span></div>
+          <div><strong>{ready ? "Final step completed" : "Requirements remain open"}</strong><span>{completed} of {requirements.length} complete</span></div>
         </div>
-        <div className="progress-track" aria-label={`${completed} of ${REQUIREMENTS.length} requirements complete`}>
-          <span style={{ width: `${(completed / REQUIREMENTS.length) * 100}%` }} />
+        <div className="progress-track" aria-label={`${completed} of ${requirements.length} requirements complete`}>
+          <span style={{ width: `${requirements.length ? (completed / requirements.length) * 100 : 0}%` }} />
         </div>
         <div className="requirement-list">
-          {REQUIREMENTS.map((requirement) => {
-            const ok = record[requirement.key] === "OK";
+          {requirements.map((requirement) => {
+            const ok = record.statuses[requirement.source] === "OK";
             return (
-              <Fragment key={requirement.key}>
+              <Fragment key={requirement.source}>
                 {requirement.isFinal && (
                   <div className={`cto-review-item ${record.cto === "CHECK" ? "needs-review" : "is-clear"}`}>
                     <CtoMark status={record.cto} />
@@ -135,7 +150,8 @@ function RecordDrawer({ record, onClose }: { record: TtasRecord; onClose: () => 
   );
 }
 
-function Dashboard({ records, sourceLabel }: { records: TtasRecord[]; sourceLabel: string }) {
+function Dashboard({ dataset, sourceLabel }: { dataset: TtasDataset; sourceLabel: string }) {
+  const { records, requirements } = dataset;
   const [ssopQuery, setSsopQuery] = useState("");
   const [descriptionQuery, setDescriptionQuery] = useState("");
   const [readiness, setReadiness] = useState("all");
@@ -144,12 +160,12 @@ function Dashboard({ records, sourceLabel }: { records: TtasRecord[]; sourceLabe
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<TtasRecord | null>(null);
 
-  const readyCount = useMemo(() => records.filter(isReady).length, [records]);
+  const readyCount = useMemo(() => records.filter((record) => isReady(record, requirements)).length, [records, requirements]);
   const completedRequirements = useMemo(
-    () => records.reduce((sum, record) => sum + completeCount(record), 0),
-    [records],
+    () => records.reduce((sum, record) => sum + completeCount(record, requirements), 0),
+    [records, requirements],
   );
-  const totalRequirements = records.length * REQUIREMENTS.length;
+  const totalRequirements = records.length * requirements.length;
   const completion = totalRequirements ? Math.round((completedRequirements / totalRequirements) * 100) : 0;
   const openRequirements = totalRequirements - completedRequirements;
 
@@ -157,7 +173,7 @@ function Dashboard({ records, sourceLabel }: { records: TtasRecord[]; sourceLabe
     const bySsop = ssopQuery.trim().toLowerCase();
     const byDescription = descriptionQuery.trim().toLowerCase();
     const result = records.filter((record) => {
-      const readinessMatch = readiness === "all" || (readiness === "ready" ? isReady(record) : !isReady(record));
+      const readinessMatch = readiness === "all" || (readiness === "ready" ? isReady(record, requirements) : !isReady(record, requirements));
       const ctoMatch = ctoFilter === "all" || (ctoFilter === "review" ? record.cto === "CHECK" : record.cto === "OK");
       return record.ssop.toLowerCase().includes(bySsop)
         && record.description.toLowerCase().includes(byDescription)
@@ -166,10 +182,10 @@ function Dashboard({ records, sourceLabel }: { records: TtasRecord[]; sourceLabe
     });
     return result.sort((a, b) => {
       if (sort === "ssop-desc") return b.ssop.localeCompare(a.ssop, undefined, { numeric: true });
-      if (sort === "completion") return completeCount(b) - completeCount(a) || a.ssop.localeCompare(b.ssop, undefined, { numeric: true });
+      if (sort === "completion") return completeCount(b, requirements) - completeCount(a, requirements) || a.ssop.localeCompare(b.ssop, undefined, { numeric: true });
       return a.ssop.localeCompare(b.ssop, undefined, { numeric: true });
     });
-  }, [ctoFilter, descriptionQuery, readiness, records, sort, ssopQuery]);
+  }, [ctoFilter, descriptionQuery, readiness, records, requirements, sort, ssopQuery]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -216,14 +232,14 @@ function Dashboard({ records, sourceLabel }: { records: TtasRecord[]; sourceLabe
         </div>
 
         <div className="table-scroll">
-          <table>
-            <thead><tr><th className="ssop-column">SSOP</th><th className="description-column">Description</th>{REQUIREMENTS.map((requirement) => <Fragment key={requirement.key}>{requirement.isFinal && <th className="status-column cto-status-column" title="CTO fiscal review">CTO</th>}<th className={`status-column ${requirement.isFinal ? "final-status-column" : ""}`} title={requirement.label}>{requirement.short}</th></Fragment>)}<th className="action-column"><span className="sr-only">Details</span></th></tr></thead>
+          <table style={{ minWidth: `${628 + (requirements.length + 1) * 62}px` }}>
+            <thead><tr><th className="ssop-column">SSOP</th><th className="description-column">Description</th>{requirements.map((requirement) => <Fragment key={requirement.source}>{requirement.isFinal && <th className="status-column cto-status-column" title="CTO fiscal review">CTO</th>}<th className={`status-column ${requirement.isFinal ? "final-status-column" : ""}`} title={requirement.label}>{requirement.short}</th></Fragment>)}<th className="action-column"><span className="sr-only">Details</span></th></tr></thead>
             <tbody>
               {visible.map((record) => (
-                <tr key={record.ssop} className={isReady(record) ? "row-ready" : ""} onClick={() => setSelected(record)}>
+                <tr key={record.ssop} className={isReady(record, requirements) ? "row-ready" : ""} onClick={() => setSelected(record)}>
                   <td><button className="ssop-button" onClick={() => setSelected(record)}>{record.ssop}</button></td>
                   <td className="record-description" title={record.description}>{record.description}</td>
-                  {REQUIREMENTS.map((requirement) => <Fragment key={requirement.key}>{requirement.isFinal && <td className="status-cell cto-status-cell"><CtoMark status={record.cto} /></td>}<td className={`status-cell ${requirement.isFinal ? "final-status-cell" : ""}`}><StatusMark ok={record[requirement.key] === "OK"} label={requirement.label} isFinal={requirement.isFinal} /></td></Fragment>)}
+                  {requirements.map((requirement) => <Fragment key={requirement.source}>{requirement.isFinal && <td className="status-cell cto-status-cell"><CtoMark status={record.cto} /></td>}<td className={`status-cell ${requirement.isFinal ? "final-status-cell" : ""}`}><StatusMark ok={record.statuses[requirement.source] === "OK"} label={requirement.label} isFinal={requirement.isFinal} /></td></Fragment>)}
                   <td><button className="row-action" aria-label={`View ${record.ssop} details`}><ChevronRight /></button></td>
                 </tr>
               ))}
@@ -237,12 +253,13 @@ function Dashboard({ records, sourceLabel }: { records: TtasRecord[]; sourceLabe
           <div><button className="icon-button" disabled={page === 1} onClick={() => setPage((current) => current - 1)} aria-label="Previous page"><ChevronLeft /></button><button className="icon-button" disabled={page === pageCount} onClick={() => setPage((current) => current + 1)} aria-label="Next page"><ChevronRight /></button></div>
         </div>
       </section>
-      {selected && <RecordDrawer record={selected} onClose={() => setSelected(null)} />}
+      {selected && <RecordDrawer record={selected} requirements={requirements} onClose={() => setSelected(null)} />}
     </main>
   );
 }
 
-function Admin({ records, onDataChanged }: { records: TtasRecord[]; onDataChanged: (records: TtasRecord[], source: string) => void }) {
+function Admin({ dataset, onDataChanged }: { dataset: TtasDataset; onDataChanged: (dataset: TtasDataset, source: string, updatedAt: string) => void }) {
+  const { records } = dataset;
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
@@ -258,14 +275,15 @@ function Admin({ records, onDataChanged }: { records: TtasRecord[]; onDataChange
     setBusy(true);
     setMessage("");
     try { setValidation(await parseSpreadsheet(file)); }
-    catch { setValidation({ records: [], errors: ["This file could not be read. Use CSV, XLSX, or XLS."], warnings: [], fileName: file.name }); }
+    catch { setValidation({ records: [], requirements: [], errors: ["This file could not be read. Use CSV, XLSX, or XLS."], warnings: [], fileName: file.name }); }
     finally { setBusy(false); }
   }
 
   function applyImport() {
     if (!validation || validation.errors.length) return;
-    saveLocalData(validation.records, validation.fileName);
-    onDataChanged(validation.records, `Local import · ${validation.fileName}`);
+    const nextDataset = { records: validation.records, requirements: validation.requirements };
+    const importedAt = saveLocalData(nextDataset, validation.fileName);
+    onDataChanged(nextDataset, `Local import · ${validation.fileName}`, importedAt);
     setMessage(`${validation.records.length} records are now active in this browser.`);
   }
 
@@ -291,7 +309,7 @@ function Admin({ records, onDataChanged }: { records: TtasRecord[]; onDataChange
 
       <div className="admin-grid">
         <section className="admin-panel import-panel">
-          <div className="panel-heading"><div><span className="panel-icon"><UploadCloud /></span><div><h2>Import spreadsheet</h2><p>Accepted formats: CSV, XLSX, and XLS</p></div></div></div>
+          <div className="panel-heading"><div><span className="panel-icon"><UploadCloud /></span><div><h2>Import spreadsheet</h2><p>New OK/NOK columns are added automatically as requirements</p></div></div></div>
           <div
             className={`upload-zone ${dragging ? "dragging" : ""}`}
             onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
@@ -308,10 +326,10 @@ function Admin({ records, onDataChanged }: { records: TtasRecord[]; onDataChange
           {validation && (
             <div className={`validation-card ${validation.errors.length ? "has-errors" : "valid"}`}>
               <div className="validation-title">{validation.errors.length ? <CircleAlert /> : <CheckCircle2 />}<div><strong>{validation.errors.length ? "File needs attention" : "File is ready"}</strong><span>{validation.fileName}</span></div></div>
-              <div className="validation-stats"><span><strong>{validation.records.length}</strong> valid records</span><span><strong>{validation.errors.length}</strong> errors</span><span><strong>{validation.warnings.length}</strong> warnings</span></div>
+              <div className="validation-stats"><span><strong>{validation.records.length}</strong> valid records</span><span><strong>{validation.requirements.length}</strong> requirements</span><span><strong>{validation.errors.length}</strong> errors</span><span><strong>{validation.warnings.length}</strong> warnings</span></div>
               {[...validation.errors.slice(0, 5), ...validation.warnings.slice(0, 3)].map((item) => <p className="validation-message" key={item}>{item}</p>)}
               {validation.errors.length > 5 && <p className="validation-message">Plus {validation.errors.length - 5} more errors.</p>}
-              <div className="button-row"><button className="primary-button" disabled={!!validation.errors.length} onClick={applyImport}><CheckCircle2 /> Apply in this browser</button><button className="secondary-button" disabled={!!validation.errors.length} onClick={() => downloadCsv(validation.records)}><Download /> Download normalized CSV</button></div>
+              <div className="button-row"><button className="primary-button" disabled={!!validation.errors.length} onClick={applyImport}><CheckCircle2 /> Apply in this browser</button><button className="secondary-button" disabled={!!validation.errors.length} onClick={() => downloadCsv(validation)}><Download /> Download normalized CSV</button></div>
             </div>
           )}
           {message && <div className="success-message"><CheckCircle2 /> {message}</div>}
@@ -322,7 +340,7 @@ function Admin({ records, onDataChanged }: { records: TtasRecord[]; onDataChange
             <div className="panel-heading"><div><span className="panel-icon"><Database /></span><div><h2>Current data</h2><p>{localMeta ? "Local import active" : "Published dataset active"}</p></div></div></div>
             <div className="current-stat"><strong>{records.length.toLocaleString()}</strong><span>SSOP records</span></div>
             {localMeta && <div className="meta-box"><span>Source file</span><strong>{localMeta.fileName}</strong><span>Imported {new Date(localMeta.importedAt).toLocaleString()}</span></div>}
-            <div className="button-stack"><button className="secondary-button" onClick={() => downloadCsv(records)}><Download /> Export active data</button>{localStorage.getItem(LOCAL_DATA_KEY) && <button className="text-button danger" onClick={restorePublished}><RefreshCw /> Restore published data</button>}</div>
+            <div className="button-stack"><button className="secondary-button" onClick={() => downloadCsv(dataset)}><Download /> Export active data</button>{localStorage.getItem(LOCAL_DATA_KEY) && <button className="text-button danger" onClick={restorePublished}><RefreshCw /> Restore published data</button>}</div>
           </section>
 
           <section className="admin-panel publish-panel">
@@ -339,8 +357,9 @@ function Admin({ records, onDataChanged }: { records: TtasRecord[]; onDataChange
 
 export default function App() {
   const [route, setRoute] = useState(() => window.location.hash.includes("admin") ? "admin" : "dashboard");
-  const [records, setRecords] = useState<TtasRecord[]>([]);
+  const [dataset, setDataset] = useState<TtasDataset>({ records: [], requirements: [] });
   const [source, setSource] = useState("Loading dataset");
+  const [updatedAt, setUpdatedAt] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -352,23 +371,20 @@ export default function App() {
   useEffect(() => {
     loadPublishedData()
       .then((loaded) => {
-        setRecords(loaded);
-        const meta = localStorage.getItem(LOCAL_META_KEY);
-        if (meta) {
-          const parsed = JSON.parse(meta) as { fileName: string };
-          setSource(`Local import · ${parsed.fileName}`);
-        } else setSource("Published dataset");
+        setDataset({ records: loaded.records, requirements: loaded.requirements });
+        setSource(loaded.sourceLabel);
+        setUpdatedAt(loaded.updatedAt);
       })
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "The dataset could not be loaded."));
   }, []);
 
   return (
     <div className="app">
-      <Header route={route} />
-      {error ? <main className="fatal-state"><CircleAlert /><h1>Data unavailable</h1><p>{error}</p></main> : records.length ? (
+      <Header route={route} updatedAt={updatedAt} />
+      {error ? <main className="fatal-state"><CircleAlert /><h1>Data unavailable</h1><p>{error}</p></main> : dataset.records.length ? (
         route === "admin"
-          ? <Admin records={records} onDataChanged={(next, nextSource) => { setRecords(next); setSource(nextSource); }} />
-          : <Dashboard records={records} sourceLabel={source} />
+          ? <Admin dataset={dataset} onDataChanged={(next, nextSource, nextUpdatedAt) => { setDataset(next); setSource(nextSource); setUpdatedAt(nextUpdatedAt); }} />
+          : <Dashboard dataset={dataset} sourceLabel={source} />
       ) : <main className="loading-state"><span /><p>Preparing TTAS data…</p></main>}
       <footer><span>TTAS Check</span><span>Commissioning readiness control</span></footer>
     </div>
