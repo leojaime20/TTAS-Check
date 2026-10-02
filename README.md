@@ -20,6 +20,8 @@ GitHub Actions rebuilds and deploys the site automatically. A local import is st
 
 The dashboard discovers requirement columns automatically. `SSOP`, `CTO`, `F.Status`, and `Primeiro Description` are reserved; every other column is treated as an `OK`/`NOK` requirement in CSV order. The green header displays the date of the latest commit that changed `public/data/ttas.csv`.
 
+Each deployment also compares the published CSV with its immediately previous committed version. The dashboard's **View changes** page lists affected SSOPs, new blockers, resolved blockers, readiness changes, and added or removed records. The comparison is generated during the GitHub Pages build, so replacing and committing `public/data/ttas.csv` is enough to refresh it.
+
 ## Reserved columns
 
 `SSOP`, `CTO`, `F.Status`, `Primeiro Description`

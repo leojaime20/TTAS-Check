@@ -1,5 +1,6 @@
 import {
   ArrowDownAZ,
+  ArrowLeft,
   ArrowUpRight,
   CalendarDays,
   Check,
@@ -13,10 +14,16 @@ import {
   FileSpreadsheet,
   Flag,
   Gauge,
+  GitCompareArrows,
+  History,
   LayoutDashboard,
+  Minus,
+  Plus,
   RefreshCw,
   Search,
   ShieldCheck,
+  TrendingDown,
+  TrendingUp,
   UploadCloud,
   X,
 } from "lucide-react";
@@ -24,16 +31,24 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   clearLocalData,
   downloadCsv,
+  loadChangeHistory,
   loadPublishedData,
   LOCAL_DATA_KEY,
   LOCAL_META_KEY,
   parseSpreadsheet,
   saveLocalData,
 } from "./data";
-import type { RequirementDefinition, TtasDataset, TtasRecord, ValidationResult } from "./types";
+import type { ChangeHistory, ChangedSsop, RequirementDefinition, TtasDataset, TtasRecord, ValidationResult } from "./types";
 
 const PAGE_SIZE = 50;
 const REPOSITORY_UPLOAD_URL = "https://github.com/leojaime20/TTAS-Check/upload/main/public/data";
+type Route = "dashboard" | "changes" | "admin";
+
+function routeFromHash(): Route {
+  if (window.location.hash.includes("admin")) return "admin";
+  if (window.location.hash.includes("changes")) return "changes";
+  return "dashboard";
+}
 
 function isReady(record: TtasRecord, requirements: RequirementDefinition[]): boolean {
   return requirements.every((requirement) => record.statuses[requirement.source] === "OK");
@@ -74,7 +89,7 @@ function CtoMark({ status }: { status: TtasRecord["cto"] }) {
   );
 }
 
-function Header({ route, updatedAt }: { route: string; updatedAt: string }) {
+function Header({ route, updatedAt }: { route: Route; updatedAt: string }) {
   const updatedLabel = formatDataDate(updatedAt);
   return (
     <header className="topbar">
@@ -85,7 +100,7 @@ function Header({ route, updatedAt }: { route: string; updatedAt: string }) {
       <div className="topbar-actions">
         {updatedLabel && <div className="data-updated" aria-label={`Last update ${updatedLabel}`}><CalendarDays /><span><span className="data-updated-prefix">Last update</span><strong>{updatedLabel}</strong></span></div>}
         <nav aria-label="Primary navigation">
-          <a className={route !== "admin" ? "active" : ""} href="#/"><LayoutDashboard /> Dashboard</a>
+          <a className={route === "dashboard" ? "active" : ""} href="#/"><LayoutDashboard /> Dashboard</a>
         </nav>
       </div>
     </header>
@@ -97,7 +112,7 @@ function SummaryCard({ icon, label, value, detail, tone = "default" }: {
   label: string;
   value: string;
   detail: string;
-  tone?: "default" | "green" | "yellow";
+  tone?: "default" | "green" | "yellow" | "danger";
 }) {
   return (
     <article className={`summary-card tone-${tone}`}>
@@ -150,7 +165,7 @@ function RecordDrawer({ record, requirements, onClose }: { record: TtasRecord; r
   );
 }
 
-function Dashboard({ dataset, sourceLabel }: { dataset: TtasDataset; sourceLabel: string }) {
+function Dashboard({ dataset, sourceLabel, history }: { dataset: TtasDataset; sourceLabel: string; history: ChangeHistory | null | undefined }) {
   const { records, requirements } = dataset;
   const [ssopQuery, setSsopQuery] = useState("");
   const [descriptionQuery, setDescriptionQuery] = useState("");
@@ -206,7 +221,10 @@ function Dashboard({ dataset, sourceLabel }: { dataset: TtasDataset; sourceLabel
           <h1>TTAS readiness at a glance</h1>
           <p>Track every prerequisite required before an SSOP can be signed.</p>
         </div>
-        <div className="source-pill"><Database /> {sourceLabel}</div>
+        <div className="hero-actions">
+          <a className="history-button" href="#/changes"><History /> View changes{history?.available ? <span>{history.summary.changedSsops}</span> : null}</a>
+          <div className="source-pill"><Database /> {sourceLabel}</div>
+        </div>
       </section>
 
       <section className="summary-grid" aria-label="TTAS summary">
@@ -254,6 +272,130 @@ function Dashboard({ dataset, sourceLabel }: { dataset: TtasDataset; sourceLabel
         </div>
       </section>
       {selected && <RecordDrawer record={selected} requirements={requirements} onClose={() => setSelected(null)} />}
+    </main>
+  );
+}
+
+function fieldLabel(field: string, requirements: RequirementDefinition[]): string {
+  if (field === "CTO") return "CTO fiscal review";
+  if (field === "Primeiro Description") return "Description";
+  return requirements.find((requirement) => requirement.source === field)?.label ?? field;
+}
+
+function changeValue(field: string, value: string | null): string {
+  if (value === null) return "Not tracked";
+  if (field === "CTO" && value === "CHECK") return "Check";
+  return value;
+}
+
+function readinessLabel(record: ChangedSsop): string {
+  if (record.kind === "added") return "Added";
+  if (record.kind === "removed") return "Removed";
+  if (record.wasReady && !record.isReady) return "No longer ready";
+  if (!record.wasReady && record.isReady) return "Now ready";
+  return "Requirements changed";
+}
+
+function ChangeHistoryPage({ history, requirements }: { history: ChangeHistory | null | undefined; requirements: RequirementDefinition[] }) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const filtered = useMemo(() => {
+    if (!history) return [];
+    const search = query.trim().toLowerCase();
+    return history.records.filter((record) => {
+      const matchesSearch = record.ssop.toLowerCase().includes(search) || record.description.toLowerCase().includes(search);
+      if (!matchesSearch) return false;
+      if (filter === "regressions") return record.changes.some((change) => change.impact === "regression");
+      if (filter === "improvements") return record.changes.some((change) => change.impact === "improvement");
+      if (filter === "readiness") return record.wasReady !== null && record.isReady !== null && record.wasReady !== record.isReady;
+      if (filter === "records") return record.kind !== "changed";
+      return true;
+    });
+  }, [filter, history, query]);
+
+  if (history === undefined) {
+    return <main className="loading-state"><span /><p>Preparing change history…</p></main>;
+  }
+
+  if (!history?.available) {
+    return (
+      <main className="page-shell changes-page">
+        <a className="back-link" href="#/"><ArrowLeft /> Back to dashboard</a>
+        <section className="history-empty"><History /><h1>No previous version yet</h1><p>Change history will appear after the next ttas.csv update is committed.</p></section>
+      </main>
+    );
+  }
+
+  const currentDate = formatDataDate(history.currentDate);
+  const previousDate = formatDataDate(history.previousDate);
+  return (
+    <main className="page-shell changes-page">
+      <a className="back-link" href="#/"><ArrowLeft /> Back to dashboard</a>
+      <section className="hero-row changes-hero">
+        <div>
+          <span className="eyebrow">Version history</span>
+          <h1>Changes since the previous update</h1>
+          <p>Comparing {previousDate || "the previous file"} with {currentDate || "the current file"}.</p>
+        </div>
+        <div className="source-pill"><GitCompareArrows /> One previous version</div>
+      </section>
+
+      <section className="summary-grid history-summary" aria-label="Change summary">
+        <SummaryCard icon={<History />} label="SSOPs changed" value={history.summary.changedSsops.toLocaleString()} detail="Including added and removed records" />
+        <SummaryCard icon={<TrendingDown />} label="New blockers" value={history.summary.regressions.toLocaleString()} detail={`${history.summary.readinessLost.toLocaleString()} SSOPs no longer ready`} tone="danger" />
+        <SummaryCard icon={<TrendingUp />} label="Resolved blockers" value={history.summary.improvements.toLocaleString()} detail={`${history.summary.readinessGained.toLocaleString()} SSOPs now ready`} tone="green" />
+        <SummaryCard icon={<Plus />} label="Records changed" value={`${history.summary.added} / ${history.summary.removed}`} detail="Added / removed SSOPs" tone="yellow" />
+      </section>
+
+      {!!history.fields.length && (
+        <section className="change-fields-panel">
+          <div className="section-heading"><div><span className="eyebrow">Requirement summary</span><h2>What changed</h2></div><span>{history.fields.length} fields affected</span></div>
+          <div className="change-fields-grid">
+            {history.fields.map((field) => (
+              <article className="change-field-card" key={field.field}>
+                <strong>{fieldLabel(field.field, requirements)}</strong>
+                <div>
+                  {!!field.regressions && <span className="change-count regression"><TrendingDown /> {field.regressions} {field.field === "CTO" ? "new Check" : "new NOK"}</span>}
+                  {!!field.improvements && <span className="change-count improvement"><TrendingUp /> {field.improvements} {field.field === "CTO" ? "cleared" : "changed to OK"}</span>}
+                  {!!field.neutral && <span className="change-count neutral"><GitCompareArrows /> {field.neutral} other</span>}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="change-list-panel">
+        <div className="change-toolbar">
+          <label><span>SSOP or description</span><div className="input-wrap"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search changes" /></div></label>
+          <label><span>Change type</span><select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">All changes</option><option value="regressions">New blockers</option><option value="improvements">Resolved blockers</option><option value="readiness">Readiness changed</option><option value="records">Added or removed</option></select></label>
+        </div>
+        <div className="change-list-meta"><strong>{filtered.length.toLocaleString()}</strong> SSOP{filtered.length === 1 ? "" : "s"} shown</div>
+        <div className="change-records">
+          {filtered.map((record) => {
+            const hasRegression = record.changes.some((change) => change.impact === "regression");
+            const statusClass = record.kind !== "changed" ? record.kind : hasRegression ? "regression" : record.changes.some((change) => change.impact === "improvement") ? "improvement" : "neutral";
+            return (
+              <article className={`change-record ${statusClass}`} key={record.ssop}>
+                <header>
+                  <div><strong>{record.ssop}</strong><p>{record.description}</p></div>
+                  <span className={`record-change-status ${statusClass}`}>{record.kind === "added" ? <Plus /> : record.kind === "removed" ? <Minus /> : hasRegression ? <TrendingDown /> : <GitCompareArrows />}{readinessLabel(record)}</span>
+                </header>
+                {record.changes.length > 0 && <div className="field-change-list">{record.changes.map((change) => (
+                  <div className={`field-change ${change.impact}`} key={change.field}>
+                    <strong>{fieldLabel(change.field, requirements)}</strong>
+                    <span className="previous-value">{changeValue(change.field, change.before)}</span>
+                    <ChevronRight />
+                    <span className="current-value">{changeValue(change.field, change.after)}</span>
+                  </div>
+                ))}</div>}
+              </article>
+            );
+          })}
+          {!filtered.length && <div className="empty-state"><Search /><h3>No changes found</h3><p>Try changing the search or filter.</p></div>}
+        </div>
+      </section>
+      <p className="history-note">This page compares only the current published ttas.csv with its immediately previous committed version.</p>
     </main>
   );
 }
@@ -356,19 +498,21 @@ function Admin({ dataset, onDataChanged }: { dataset: TtasDataset; onDataChanged
 }
 
 export default function App() {
-  const [route, setRoute] = useState(() => window.location.hash.includes("admin") ? "admin" : "dashboard");
+  const [route, setRoute] = useState<Route>(routeFromHash);
   const [dataset, setDataset] = useState<TtasDataset>({ records: [], requirements: [] });
+  const [history, setHistory] = useState<ChangeHistory | null | undefined>(undefined);
   const [source, setSource] = useState("Loading dataset");
   const [updatedAt, setUpdatedAt] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const onHashChange = () => setRoute(window.location.hash.includes("admin") ? "admin" : "dashboard");
+    const onHashChange = () => setRoute(routeFromHash());
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
   useEffect(() => {
+    void loadChangeHistory().then(setHistory);
     loadPublishedData()
       .then((loaded) => {
         setDataset({ records: loaded.records, requirements: loaded.requirements });
@@ -384,7 +528,9 @@ export default function App() {
       {error ? <main className="fatal-state"><CircleAlert /><h1>Data unavailable</h1><p>{error}</p></main> : dataset.records.length ? (
         route === "admin"
           ? <Admin dataset={dataset} onDataChanged={(next, nextSource, nextUpdatedAt) => { setDataset(next); setSource(nextSource); setUpdatedAt(nextUpdatedAt); }} />
-          : <Dashboard dataset={dataset} sourceLabel={source} />
+          : route === "changes"
+            ? <ChangeHistoryPage history={history} requirements={dataset.requirements} />
+            : <Dashboard dataset={dataset} sourceLabel={source} history={history} />
       ) : <main className="loading-state"><span /><p>Preparing TTAS data…</p></main>}
       <footer><span>TTAS Check</span><span>Commissioning readiness control</span></footer>
     </div>

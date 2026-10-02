@@ -30,3 +30,48 @@ export type ValidationResult = TtasDataset & {
   warnings: string[];
   fileName: string;
 };
+
+export type ChangeImpact = "regression" | "improvement" | "neutral";
+
+export type FieldChange = {
+  field: string;
+  before: string | null;
+  after: string | null;
+  impact: ChangeImpact;
+};
+
+export type ChangedSsop = {
+  ssop: string;
+  description: string;
+  kind: "changed" | "added" | "removed";
+  wasReady: boolean | null;
+  isReady: boolean | null;
+  changes: FieldChange[];
+};
+
+export type ChangeFieldSummary = {
+  field: string;
+  total: number;
+  regressions: number;
+  improvements: number;
+  neutral: number;
+};
+
+export type ChangeHistory = {
+  available: boolean;
+  currentDate: string;
+  previousDate: string;
+  currentVersion: string;
+  previousVersion: string;
+  summary: {
+    changedSsops: number;
+    regressions: number;
+    improvements: number;
+    readinessLost: number;
+    readinessGained: number;
+    added: number;
+    removed: number;
+  };
+  fields: ChangeFieldSummary[];
+  records: ChangedSsop[];
+};

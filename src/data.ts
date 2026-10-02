@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import type {
   CtoStatus,
+  ChangeHistory,
   LoadedDataset,
   RequirementDefinition,
   RequirementStatus,
@@ -207,6 +208,17 @@ export async function loadPublishedData(): Promise<LoadedDataset> {
     }
   }
   return { records: result.records, requirements: result.requirements, sourceLabel: "Published dataset", updatedAt };
+}
+
+export async function loadChangeHistory(): Promise<ChangeHistory | null> {
+  try {
+    const response = await fetch(`${import.meta.env.BASE_URL}data/changes.json?refresh=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) return null;
+    const history = await response.json() as ChangeHistory;
+    return history && typeof history.available === "boolean" && Array.isArray(history.records) && Array.isArray(history.fields) ? history : null;
+  } catch {
+    return null;
+  }
 }
 
 export function saveLocalData(dataset: TtasDataset, fileName: string): string {

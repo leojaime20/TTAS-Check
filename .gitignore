@@ -36,6 +36,7 @@ yarn-error.log*
 
 /dist/
 /public/data/metadata.json
+/public/data/changes.json
 *.tsbuildinfo
 /.wrangler/
 /outputs/
