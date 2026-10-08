@@ -13,6 +13,7 @@ const changesPath = resolve(projectRoot, "public/data/changes.json");
 const SSOP_HEADER = "SSOP";
 const DESCRIPTION_HEADER = "Primeiro Description";
 const CTO_HEADER = "CTO";
+const FINAL_STATUS_HEADER = "F.Status";
 const STATUS_ALIASES = new Map([
   ["YES", "OK"], ["Y", "OK"], ["TRUE", "OK"], ["COMPLETE", "OK"], ["COMPLETED", "OK"],
   ["NO", "NOK"], ["N", "NOK"], ["FALSE", "NOK"], ["OPEN", "NOK"], ["INCOMPLETE", "NOK"], ["NOT OK", "NOK"],
@@ -54,7 +55,7 @@ function readiness(record, requirementFields) {
 }
 
 function impactFor(field, before, after) {
-  if (field === DESCRIPTION_HEADER || after === undefined) return "neutral";
+  if (field === DESCRIPTION_HEADER || field === FINAL_STATUS_HEADER || after === undefined) return "neutral";
   if (field === CTO_HEADER) {
     if (after === "CHECK" && before !== "CHECK") return "regression";
     if (before === "CHECK" && after === "OK") return "improvement";
@@ -68,8 +69,8 @@ function impactFor(field, before, after) {
 export function compareCsvTexts(currentCsv, previousCsv, version = {}) {
   const current = datasetFromCsv(currentCsv);
   const previous = datasetFromCsv(previousCsv);
-  const currentRequirements = current.headers.filter((field) => ![SSOP_HEADER, CTO_HEADER, DESCRIPTION_HEADER].includes(field));
-  const previousRequirements = previous.headers.filter((field) => ![SSOP_HEADER, CTO_HEADER, DESCRIPTION_HEADER].includes(field));
+  const currentRequirements = current.headers.filter((field) => ![SSOP_HEADER, CTO_HEADER, FINAL_STATUS_HEADER, DESCRIPTION_HEADER].includes(field));
+  const previousRequirements = previous.headers.filter((field) => ![SSOP_HEADER, CTO_HEADER, FINAL_STATUS_HEADER, DESCRIPTION_HEADER].includes(field));
   const fields = [...new Set([...current.headers, ...previous.headers])].filter((field) => field !== SSOP_HEADER);
   const ssops = [...new Set([...current.records.keys(), ...previous.records.keys()])];
   const fieldSummary = new Map();

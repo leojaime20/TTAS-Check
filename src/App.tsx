@@ -50,7 +50,7 @@ function routeFromHash(): Route {
   return "dashboard";
 }
 
-function isReady(record: TtasRecord, requirements: RequirementDefinition[]): boolean {
+function isReadyToSign(record: TtasRecord, requirements: RequirementDefinition[]): boolean {
   return requirements.every((requirement) => record.statuses[requirement.source] === "OK");
 }
 
@@ -69,7 +69,7 @@ function formatDataDate(value: string): string {
 }
 
 function StatusMark({ ok, label, isFinal = false }: { ok: boolean; label: string; isFinal?: boolean }) {
-  const state = ok ? (isFinal ? "Finished" : "Complete") : "Open";
+  const state = ok ? (isFinal ? "Finished" : "Complete") : (isFinal ? "Not finished" : "Open");
   return (
     <span className={`status-mark ${ok ? (isFinal ? "status-finished" : "status-ok") : "status-open"}`} title={`${label}: ${state}`}>
       {ok ? (isFinal ? <Flag aria-hidden="true" /> : <Check aria-hidden="true" />) : <X aria-hidden="true" />}
@@ -123,8 +123,12 @@ function SummaryCard({ icon, label, value, detail, tone = "default" }: {
 }
 
 function RecordDrawer({ record, requirements, onClose }: { record: TtasRecord; requirements: RequirementDefinition[]; onClose: () => void }) {
-  const completed = completeCount(record, requirements);
-  const ready = isReady(record, requirements);
+  const prerequisites = requirements.filter((requirement) => !requirement.isFinal);
+  const finalStep = requirements.find((requirement) => requirement.isFinal);
+  const finalComplete = !!finalStep && record.statuses[finalStep.source] === "OK";
+  const completed = completeCount(record, prerequisites);
+  const ready = isReadyToSign(record, prerequisites);
+  const readinessTitle = !ready ? "Requirements remain open" : finalComplete ? "Final step completed" : "Ready for final step";
   return (
     <div className="drawer-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <aside className="record-drawer" role="dialog" aria-modal="true" aria-labelledby="record-title">
@@ -133,11 +137,11 @@ function RecordDrawer({ record, requirements, onClose }: { record: TtasRecord; r
         <h2 id="record-title">{record.ssop}</h2>
         <p className="drawer-description">{record.description}</p>
         <div className={`readiness-callout ${ready ? "ready" : "pending"}`}>
-          {ready ? <Flag /> : <CircleAlert />}
-          <div><strong>{ready ? "Final step completed" : "Requirements remain open"}</strong><span>{completed} of {requirements.length} complete</span></div>
+          {!ready ? <CircleAlert /> : finalComplete ? <Flag /> : <CheckCircle2 />}
+          <div><strong>{readinessTitle}</strong><span>{completed} of {prerequisites.length} requirements complete</span></div>
         </div>
-        <div className="progress-track" aria-label={`${completed} of ${requirements.length} requirements complete`}>
-          <span style={{ width: `${requirements.length ? (completed / requirements.length) * 100 : 0}%` }} />
+        <div className="progress-track" aria-label={`${completed} of ${prerequisites.length} requirements complete`}>
+          <span style={{ width: `${prerequisites.length ? (completed / prerequisites.length) * 100 : 0}%` }} />
         </div>
         <div className="requirement-list">
           {requirements.map((requirement) => {
@@ -154,7 +158,7 @@ function RecordDrawer({ record, requirements, onClose }: { record: TtasRecord; r
                 <div className="requirement-item">
                   <StatusMark ok={ok} label={requirement.label} isFinal={requirement.isFinal} />
                   <span>{requirement.label}</span>
-                  <strong className={ok ? (requirement.isFinal ? "text-finished" : "text-ok") : "text-open"}>{ok ? (requirement.isFinal ? "Finished" : "Complete") : "Open"}</strong>
+                  <strong className={ok ? (requirement.isFinal ? "text-finished" : "text-ok") : "text-open"}>{ok ? (requirement.isFinal ? "Finished" : "Complete") : (requirement.isFinal ? "Not finished" : "Open")}</strong>
                 </div>
               </Fragment>
             );
@@ -167,6 +171,7 @@ function RecordDrawer({ record, requirements, onClose }: { record: TtasRecord; r
 
 function Dashboard({ dataset, sourceLabel, history }: { dataset: TtasDataset; sourceLabel: string; history: ChangeHistory | null | undefined }) {
   const { records, requirements } = dataset;
+  const prerequisites = useMemo(() => requirements.filter((requirement) => !requirement.isFinal), [requirements]);
   const [ssopQuery, setSsopQuery] = useState("");
   const [descriptionQuery, setDescriptionQuery] = useState("");
   const [readiness, setReadiness] = useState("all");
@@ -175,12 +180,12 @@ function Dashboard({ dataset, sourceLabel, history }: { dataset: TtasDataset; so
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<TtasRecord | null>(null);
 
-  const readyCount = useMemo(() => records.filter((record) => isReady(record, requirements)).length, [records, requirements]);
+  const readyCount = useMemo(() => records.filter((record) => isReadyToSign(record, prerequisites)).length, [prerequisites, records]);
   const completedRequirements = useMemo(
-    () => records.reduce((sum, record) => sum + completeCount(record, requirements), 0),
-    [records, requirements],
+    () => records.reduce((sum, record) => sum + completeCount(record, prerequisites), 0),
+    [prerequisites, records],
   );
-  const totalRequirements = records.length * requirements.length;
+  const totalRequirements = records.length * prerequisites.length;
   const completion = totalRequirements ? Math.round((completedRequirements / totalRequirements) * 100) : 0;
   const openRequirements = totalRequirements - completedRequirements;
 
@@ -188,7 +193,7 @@ function Dashboard({ dataset, sourceLabel, history }: { dataset: TtasDataset; so
     const bySsop = ssopQuery.trim().toLowerCase();
     const byDescription = descriptionQuery.trim().toLowerCase();
     const result = records.filter((record) => {
-      const readinessMatch = readiness === "all" || (readiness === "ready" ? isReady(record, requirements) : !isReady(record, requirements));
+      const readinessMatch = readiness === "all" || (readiness === "ready" ? isReadyToSign(record, prerequisites) : !isReadyToSign(record, prerequisites));
       const ctoMatch = ctoFilter === "all" || (ctoFilter === "review" ? record.cto === "CHECK" : record.cto === "OK");
       return record.ssop.toLowerCase().includes(bySsop)
         && record.description.toLowerCase().includes(byDescription)
@@ -197,10 +202,10 @@ function Dashboard({ dataset, sourceLabel, history }: { dataset: TtasDataset; so
     });
     return result.sort((a, b) => {
       if (sort === "ssop-desc") return b.ssop.localeCompare(a.ssop, undefined, { numeric: true });
-      if (sort === "completion") return completeCount(b, requirements) - completeCount(a, requirements) || a.ssop.localeCompare(b.ssop, undefined, { numeric: true });
+      if (sort === "completion") return completeCount(b, prerequisites) - completeCount(a, prerequisites) || a.ssop.localeCompare(b.ssop, undefined, { numeric: true });
       return a.ssop.localeCompare(b.ssop, undefined, { numeric: true });
     });
-  }, [ctoFilter, descriptionQuery, readiness, records, requirements, sort, ssopQuery]);
+  }, [ctoFilter, descriptionQuery, prerequisites, readiness, records, sort, ssopQuery]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -254,7 +259,7 @@ function Dashboard({ dataset, sourceLabel, history }: { dataset: TtasDataset; so
             <thead><tr><th className="ssop-column">SSOP</th><th className="description-column">Description</th>{requirements.map((requirement) => <Fragment key={requirement.source}>{requirement.isFinal && <th className="status-column cto-status-column" title="CTO fiscal review">CTO</th>}<th className={`status-column ${requirement.isFinal ? "final-status-column" : ""}`} title={requirement.label}>{requirement.short}</th></Fragment>)}<th className="action-column"><span className="sr-only">Details</span></th></tr></thead>
             <tbody>
               {visible.map((record) => (
-                <tr key={record.ssop} className={isReady(record, requirements) ? "row-ready" : ""} onClick={() => setSelected(record)}>
+                <tr key={record.ssop} className={isReadyToSign(record, prerequisites) ? "row-ready" : ""} onClick={() => setSelected(record)}>
                   <td><button className="ssop-button" onClick={() => setSelected(record)}>{record.ssop}</button></td>
                   <td className="record-description" title={record.description}>{record.description}</td>
                   {requirements.map((requirement) => <Fragment key={requirement.source}>{requirement.isFinal && <td className="status-cell cto-status-cell"><CtoMark status={record.cto} /></td>}<td className={`status-cell ${requirement.isFinal ? "final-status-cell" : ""}`}><StatusMark ok={record.statuses[requirement.source] === "OK"} label={requirement.label} isFinal={requirement.isFinal} /></td></Fragment>)}
@@ -293,7 +298,7 @@ function readinessLabel(record: ChangedSsop): string {
   if (record.kind === "removed") return "Removed";
   if (record.wasReady && !record.isReady) return "No longer ready";
   if (!record.wasReady && record.isReady) return "Now ready";
-  return "Requirements changed";
+  return "Changes recorded";
 }
 
 function ChangeHistoryPage({ history, requirements }: { history: ChangeHistory | null | undefined; requirements: RequirementDefinition[] }) {
